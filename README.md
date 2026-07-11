@@ -97,6 +97,8 @@ Tool 执行  →  Observation（原始 chunk + 元数据 + 距离，不直接作
 - 大型文档若超过数十个 chunks，建议后续升级为 Map-Reduce 分层总结。
 - 本项目聚焦“私有文档问答 + 来源可信 + 多文档管理”，适合作为企业知识库 / 个人文档助手的原型。
 
+![图片描述文字](https://github.com/GMTX100/rag/blob/main/iamges/iamge1.png)
+
 ## 📄 许可证
 
 仅供学习与交流使用。
