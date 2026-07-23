@@ -4,24 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from src.llm import chat_completion
 from src.prompts import AGENT_FINAL_PROMPT, RAG_SYSTEM_PROMPT
 from src.retriever import retrieve
-
-
-def deduplicate_evidence(
-    retrieved_docs: Iterable[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
-    seen = set()
-    result = []
-    for item in retrieved_docs:
-        metadata = item.get("metadata", {})
-        key = (
-            metadata.get("filename"),
-            metadata.get("page"),
-            metadata.get("chunk_index"),
-        )
-        if key not in seen:
-            seen.add(key)
-            result.append(item)
-    return result
+from src.utils import deduplicate_docs
 
 
 def format_context(
@@ -34,7 +17,7 @@ def format_context(
     used_docs: List[Dict[str, Any]] = []
     current_length = 0
 
-    for item in deduplicate_evidence(retrieved_docs):
+    for item in deduplicate_docs(retrieved_docs):
         metadata = item.get("metadata", {})
         filename = metadata.get("filename", "unknown")
         page = metadata.get("page", "unknown")
@@ -81,8 +64,12 @@ def generate_answer_from_documents(
     response_mode: str = "qa",
     answer_instruction: str = "",
     tool_state: str = "",
-) -> str:
-    """只负责根据已经取得的证据生成最终答案。"""
+    stream: bool = False,
+):
+    """根据已有证据生成最终答案。
+
+    stream=False 返回完整字符串；stream=True 返回文本块生成器（中期增强：流式输出）。
+    """
     context, used_docs = format_context(retrieved_docs)
 
     if not context and not tool_state:
@@ -110,11 +97,27 @@ def generate_answer_from_documents(
         system_prompt=AGENT_FINAL_PROMPT,
         user_prompt=user_prompt,
         temperature=0.2,
+        stream=stream,
     )
+
+    if stream:
+        return _stream_with_sources(answer, used_docs)
 
     if used_docs:
         return f"{answer}\n\n---\n\n### 参考来源\n{build_sources(used_docs)}"
     return answer
+
+
+def _stream_with_sources(answer_stream, used_docs):
+    """流式答案：逐块产出正文，结束后追加参考来源。"""
+    full = []
+    for chunk in answer_stream:
+        full.append(chunk)
+        yield chunk
+    if used_docs:
+        tail = f"\n\n---\n\n### 参考来源\n{build_sources(used_docs)}"
+        full.append(tail)
+        yield tail
 
 
 def rag_answer(

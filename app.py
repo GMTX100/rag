@@ -1,9 +1,12 @@
+import inspect
 import json
 from typing import Any, Dict
 
 import streamlit as st
 
+import src.config as cfg
 from src.agent import agent_answer
+from src.document_loader import supported_extensions
 from src.kb_operations import (
     build_knowledge_base,
     clear_knowledge_base,
@@ -64,17 +67,65 @@ def render_sidebar() -> Dict[str, Any]:
             value=True,
             help="展示 Planner、工具参数和 Observation，便于调试。",
         )
+        stream_output = st.checkbox(
+            "流式输出答案",
+            value=True,
+            help="逐字流式生成最终答案（中期增强）。",
+        )
         replace_same_name = st.checkbox(
             "同名文档自动覆盖",
             value=True,
         )
 
         st.divider()
+        st.subheader("🔎 检索增强（中期增强）")
+        use_rerank = st.checkbox(
+            "启用 Reranker 重排序",
+            value=cfg.RERANK_ENABLED,
+            help="检索后对候选做重排序，提升 top-k 精度。默认零依赖词法重排。",
+        )
+        use_hybrid = st.checkbox(
+            "启用混合检索 Hybrid Search",
+            value=cfg.HYBRID_SEARCH,
+            help="BM25 词法 + 向量语义融合（RRF），兼顾关键词与语义。",
+        )
+        hybrid_alpha = st.slider(
+            "混合检索权重 α（BM25 占比）",
+            min_value=0.0,
+            max_value=1.0,
+            value=cfg.HYBRID_ALPHA,
+            step=0.1,
+            help="0=纯向量，1=纯 BM25。",
+            disabled=not use_hybrid,
+        )
+        memory_max_tokens = st.slider(
+            "对话记忆预算（token 近似）",
+            min_value=500,
+            max_value=6000,
+            value=cfg.MEMORY_MAX_TOKENS,
+            step=500,
+            help="超过预算时对较早对话做 LLM 摘要压缩。",
+        )
+        memory_use_summary = st.checkbox(
+            "较早对话使用 LLM 摘要压缩",
+            value=cfg.MEMORY_USE_SUMMARY,
+            help="关闭则仅截断展示较早消息。",
+        )
+
+        # 把开关实时写入 config，供检索/记忆模块在调用时读取。
+        cfg.RERANK_ENABLED = use_rerank
+        cfg.HYBRID_SEARCH = use_hybrid
+        cfg.HYBRID_ALPHA = hybrid_alpha
+        cfg.MEMORY_MAX_TOKENS = memory_max_tokens
+        cfg.MEMORY_USE_SUMMARY = memory_use_summary
+
+        st.divider()
         st.subheader("📤 构建知识库")
         uploaded_files = st.file_uploader(
             "上传文档",
-            type=["pdf", "txt", "md"],
+            type=supported_extensions(),
             accept_multiple_files=True,
+            help="支持 PDF / TXT / MD / DOCX / PPTX / HTML / CSV",
         )
         build_button = st.button(
             "构建 / 更新知识库",
@@ -139,7 +190,13 @@ def render_sidebar() -> Dict[str, Any]:
         "chunk_overlap": chunk_overlap,
         "max_agent_steps": max_agent_steps,
         "show_agent_trace": show_agent_trace,
+        "stream_output": stream_output,
         "replace_same_name": replace_same_name,
+        "use_rerank": use_rerank,
+        "use_hybrid": use_hybrid,
+        "hybrid_alpha": hybrid_alpha,
+        "memory_max_tokens": memory_max_tokens,
+        "memory_use_summary": memory_use_summary,
         "uploaded_files": uploaded_files,
         "build_button": build_button,
         "selected_documents": selected_documents,
@@ -389,9 +446,14 @@ def handle_user_question(sidebar_state: Dict[str, Any]):
                     question=question,
                     history=history,
                     max_steps=sidebar_state["max_agent_steps"],
+                    stream=sidebar_state["stream_output"],
                 )
                 answer = result["answer"]
-                st.markdown(answer)
+                # 中期增强：流式输出（answer 为生成器时逐字渲染）
+                if inspect.isgenerator(answer):
+                    answer = st.write_stream(answer)
+                else:
+                    st.markdown(answer)
                 if sidebar_state["show_agent_trace"] and result.get("trace"):
                     with st.expander("查看 Planner / Observation 执行轨迹"):
                         render_trace(result["trace"])

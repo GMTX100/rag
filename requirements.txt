@@ -1,5 +1,19 @@
 streamlit
 chromadb
 pypdf
+PyMuPDF
 openai
 python-dotenv
+langchain>=1.0
+langchain-openai>=1.0
+langchain-core>=1.0
+langgraph>=0.3
+# 中期增强：混合检索（BM25）与更多文档格式
+rank_bm25
+python-docx
+python-pptx
+beautifulsoup4
+pytest
+# 可选（按需取消注释）：
+# sentence-transformers   # 启用 CrossEncoderReranker（bge-reranker 等）高质量重排序
+# tiktoken                # 更精确的 token 计数（默认使用启发式估算）

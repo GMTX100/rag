@@ -15,7 +15,15 @@ from src.vectorstore import (
 
 
 def safe_filename(filename: str) -> str:
-    return Path(filename).name
+    """提取基本文件名并防御路径穿越（如 "../etc/passwd"）。"""
+    name = Path(filename).name
+    # 去掉任何残留的路径分隔符与上级引用，仅保留最后一段基本名。
+    for sep in ("/", "\\"):
+        name = name.replace(sep, "")
+    name = name.replace("..", "")
+    if not name:
+        raise ValueError(f"非法文件名：{filename}")
+    return name
 
 
 def save_uploaded_file(uploaded_file) -> Path:

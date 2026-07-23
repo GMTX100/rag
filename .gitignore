@@ -2,6 +2,12 @@
 __pycache__/
 *.pyc
 .env
+.env.*
+!.env.example
 chroma_db/
+data/chroma_db/
+data/uploads/
+.idea/
+.workbuddy/
 *.db
 .DS_Store

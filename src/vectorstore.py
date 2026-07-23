@@ -177,6 +177,31 @@ def get_document_info(filename: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def get_all_chunks(
+    filenames: Optional[Iterable[str]] = None,
+) -> List[Dict[str, Any]]:
+    """读取全部 chunks（可按 filename 过滤），供混合检索构建 BM25 词表。"""
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+
+    query_kwargs: Dict[str, Any] = {"include": ["documents", "metadatas"]}
+    if filenames:
+        unique = list(dict.fromkeys(str(name) for name in filenames))
+        if unique:
+            query_kwargs["where"] = {"filename": {"$in": unique}}
+
+    result = collection.get(**query_kwargs)
+    ids = result.get("ids") or []
+    documents = result.get("documents") or []
+    metadatas = result.get("metadatas") or []
+
+    return [
+        {"id": item_id, "text": text, "metadata": meta or {}}
+        for item_id, text, meta in zip(ids, documents, metadatas)
+    ]
+
+
 def delete_document_by_filename(filename: str) -> int:
     """按 metadata.filename 删除一个文件的全部 chunks。"""
     collection = get_collection()
